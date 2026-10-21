@@ -116,6 +116,30 @@ No AppStream utilities, extra data directories, or networking helpers are added.
 Compatible-library replacement and ad-hoc re-signing remain available as described
 below; the component allowlist does not waive license obligations.
 
+### WebP and SharpYUV
+
+The complete CI graph also identified `libtiff` → WebP → SharpYUV. Only WebP
+source **1.6.0** and resolved `libwebp.7.2.0.dylib` / `libsharpyuv.0.1.2.dylib`
+are admitted, including numeric Homebrew keg revisions. Mux/demux libraries,
+command-line tools, other ABIs, and other source versions remain rejected.
+
+The installed recipe must also match the audited SHA-256
+`c2daf79de310f5aa1a3c8a2e412c6fcec1cc1ff47ba506e4bbddcaffbf7dc90c`.
+Any recipe change, even metadata or build-time `inreplace`, requires another
+audit. Numeric keg-revision normalization does not waive this recipe pin.
+Ruby recipe behavior is not inferred from a token blacklist.
+
+The [official source archive](https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz)
+is pinned to SHA-256 `e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564`.
+Its [COPYING](https://chromium.googlesource.com/webm/libwebp/+/refs/tags/v1.6.0/COPYING)
+contains BSD-3-Clause terms; SharpYUV source notices refer to that same license.
+The app retains exact `COPYING`, `PATENTS`, `AUTHORS`, and source-file copyright
+notices; the corresponding-source asset retains the complete unmodified archive.
+[Google's PATENTS grant](https://chromium.googlesource.com/webm/libwebp/+/refs/tags/v1.6.0/PATENTS)
+is limited to specified Google-licensable necessary claims, excludes certain
+modification-only claims, and has litigation termination conditions. It is not
+universal patent clearance, a third-party patent license, or a legal warranty.
+
 ## Sources and licenses: a separate gate
 
 `source-lock.json` uses **installed** recipes and their stable URL/SHA pairs,

@@ -29,6 +29,12 @@ Load command 1
 '''
 
 
+def audited_components():
+    for family, (version, filenames) in pack.AUDITED_RUNTIME_COMPONENTS.items():
+        for filename in filenames:
+            yield family, version, filename
+
+
 class PackagerTests(unittest.TestCase):
     def test_loads_preserve_spaces_and_ignore_header(self):
         self.assertEqual(pack.loads("/app with space/gliff:\n\t@loader_path/lib a.dylib (compatibility version 1.0.0, current version 2.0.0)\n"), ["@loader_path/lib a.dylib"])
@@ -73,7 +79,7 @@ class PackagerTests(unittest.TestCase):
                 pack.safe_tree(root)
 
     def test_new_runtime_components_accept_only_audited_resolved_libraries(self):
-        for family, (version, filename) in pack.AUDITED_RUNTIME_COMPONENTS.items():
+        for family, version, filename in audited_components():
             for revision in ("", "_2"):
                 with self.subTest(family=family, revision=revision), tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp).resolve()
@@ -90,7 +96,7 @@ class PackagerTests(unittest.TestCase):
 
     def test_new_runtime_components_reject_versions_abis_tools_and_unknowns(self):
         cases = []
-        for family, (version, filename) in pack.AUDITED_RUNTIME_COMPONENTS.items():
+        for family, version, filename in audited_components():
             cases.extend((family, bad_version, "lib", filename)
                          for bad_version in ("99.0.0", version + "_0", version + "_head"))
             cases.extend((family, version, directory, bad_name) for directory, bad_name in (
@@ -109,6 +115,64 @@ class PackagerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Unaudited runtime component|Unreviewed runtime formula"):
                     bundle.remember_keg(source)
                 self.assertFalse(bundle.kegs)
+
+    def test_webp_rejects_tools_alias_files_mux_demux_and_other_versions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            for version, path in (("1.6.1", "lib/libwebp.7.2.0.dylib"),
+                                  ("1.6.0", "lib/libwebp.7.dylib"), ("1.6.0", "lib/libwebpmux.3.dylib"),
+                                  ("1.6.0", "lib/libwebpdemux.2.dylib"), ("1.6.0", "bin/cwebp")):
+                source = root / "Cellar/webp" / version / path
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.touch()
+                with self.subTest(path=source), self.assertRaisesRegex(ValueError, "Unaudited runtime component"):
+                    pack.runtime_keg(source, root)
+
+    def test_webp_exact_legal_texts_and_per_file_notices_are_retained(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive, dest = root / "source.tar", root / "notices"
+            dest.mkdir()
+            texts = {"COPYING": b"copyright and BSD conditions", "PATENTS": b"exact grant and limitations", "AUTHORS": b"actual authors",
+                     "sharpyuv/sharpyuv.c": b"// Copyright 2022 Google Inc. All Rights Reserved.\n// COPYING PATENTS AUTHORS\n#include <x>\n"}
+            for omit in (None, "PATENTS"):
+                with tarfile.open(archive, "w") as out:
+                    for name, data in texts.items():
+                        if name == omit: continue
+                        item = tarfile.TarInfo("libwebp-1.6.0/" + name)
+                        item.size = len(data)
+                        out.addfile(item, io.BytesIO(data))
+                if omit is None:
+                    with self.assertRaisesRegex(ValueError, "audited 1.6.0 archive"):
+                        pack.copy_webp_notices(archive, dest)
+                with patch.object(pack, "sha256", return_value=pack.WEBP_SOURCE_SHA256):
+                    if omit:
+                        with self.assertRaisesRegex(ValueError, "Missing WebP legal"):
+                            pack.copy_webp_notices(archive, dest)
+                    else:
+                        pack.copy_webp_notices(archive, dest)
+                        self.assertEqual((dest / "PATENTS").read_bytes(), texts["PATENTS"])
+                        self.assertIn(b"Copyright 2022 Google Inc.", (dest / "SOURCE_NOTICES.txt").read_bytes())
+
+    def test_webp_recipe_hash_rejects_any_modification(self):
+        base = f'class Webp < Formula\n  url "{pack.WEBP_SOURCE_URL}"\n  sha256 "{pack.WEBP_SOURCE_SHA256}"\n'
+        modifications = ('  patch :DATA\nend\n__END__\ndiff --git a/source b/source\n',
+                         '  on_macos do\n    patch :DATA\n  end\nend\n__END__\ninline patch\n',
+                         '  def install\n    inreplace "src/dec/webp_dec.c", "old", "new"\n  end\nend\n',
+                         '  resource "extra" do\n  end\nend\n',
+                         '  send(:patch, :DATA)\nend\n', 'end\n# metadata-only change\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe = Path(tmp) / "webp.rb"
+            recipe.write_text(base + '  bottle do\n    sha256 arm64_sequoia: "bottle"\n  end\nend\n')
+            # Fixture-local pin only; production binds the exact audited CI recipe.
+            with patch.object(pack, "WEBP_RECIPE_SHA256", pack.sha256(recipe)):
+                pack.require_webp_recipe(recipe, pack.recipe_sources(recipe, "webp", "1.6.0"))
+                for modification in modifications:
+                    recipe.write_text(base + modification)
+                    entries = pack.recipe_sources(recipe, "webp", "1.6.0")
+                    self.assertEqual(len(entries), 1)
+                    with self.subTest(modification=modification), self.assertRaisesRegex(ValueError, "re-audit"):
+                        pack.require_webp_recipe(recipe, entries)
 
     def validate_fixture(self, library, architecture="arm64", min_library="27.0"):
         with tempfile.TemporaryDirectory(prefix="moved app ") as tmp:

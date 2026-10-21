@@ -31,10 +31,14 @@ APPROVED_FORMULAS = {"brotli", "cairo", "fontconfig", "freetype", "fribidi", "gd
 # These newly linked families are audited only at the listed source version and
 # resolved library filename, not as blanket permission to redistribute tools.
 AUDITED_RUNTIME_COMPONENTS = {
-    "appstream": ("1.2.0", "libappstream.5.dylib"),
-    "libfyaml": ("0.9.6", "libfyaml.0.9.6.dylib"),
-    "libxmlb": ("0.3.29", "libxmlb.2.dylib"),
+    "appstream": ("1.2.0", ("libappstream.5.dylib",)),
+    "libfyaml": ("0.9.6", ("libfyaml.0.9.6.dylib",)),
+    "libxmlb": ("0.3.29", ("libxmlb.2.dylib",)),
+    "webp": ("1.6.0", ("libwebp.7.2.0.dylib", "libsharpyuv.0.1.2.dylib")),
 }
+WEBP_RECIPE_SHA256 = "c2daf79de310f5aa1a3c8a2e412c6fcec1cc1ff47ba506e4bbddcaffbf7dc90c"
+WEBP_SOURCE_SHA256 = "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564"
+WEBP_SOURCE_URL = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz"
 LICENSE_RE = re.compile(r"^(copying|licen[sc]e|copyright|notice|authors)([._-].*)?$", re.I)
 
 
@@ -157,6 +161,38 @@ def copy_archive_licenses(archive, destination):
                     target.write_bytes(source.read(member))
 
 
+def require_webp_recipe(recipe, entries):
+    """Only the audited unmodified archive is covered, never recipe modifications."""
+    if (sha256(recipe) != WEBP_RECIPE_SHA256 or len(entries) != 1
+            or entries[0]["url"] != WEBP_SOURCE_URL or entries[0]["sha256"] != WEBP_SOURCE_SHA256):
+        raise ValueError("WebP recipe hash/source differs from the audited recipe; re-audit before packaging")
+
+
+def copy_webp_notices(archive, destination):
+    """Retain exact root legal texts and per-file notices from the audited source."""
+    if sha256(archive) != WEBP_SOURCE_SHA256:
+        raise ValueError("WebP source must match the audited 1.6.0 archive")
+    required, found, notices = {"COPYING", "PATENTS", "AUTHORS"}, set(), []
+    with tarfile.open(archive) as source:
+        for member in source:
+            if not member.isfile():
+                continue
+            name = member.name.removeprefix("libwebp-1.6.0/")
+            if name in required:
+                if member.size > 65536:
+                    raise ValueError("Oversize WebP legal text")
+                (destination / name).write_bytes(source.extractfile(member).read(65537))
+                found.add(name)
+            elif name.startswith(("src/", "sharpyuv/")) and name.endswith((".c", ".h")):
+                data = source.extractfile(member).read(4096)
+                header = re.match(rb"(?://[^\n]*\n)+|/\*.*?\*/", data, re.S)
+                if header and b"Copyright" in header[0]:
+                    notices.append(member.name.encode() + b"\n" + header[0] + b"\n\n")
+    if found != required or not any(b"sharpyuv/" in notice for notice in notices):
+        raise ValueError("Missing WebP legal text or SharpYUV source notices")
+    (destination / "SOURCE_NOTICES.txt").write_bytes(b"".join(notices))
+
+
 def require_crate_license(package, candidates):
     """No missing-license exceptions: each distributed crate needs actual text."""
     if not any(re.match(r"^(copying|licen[sc]e|copyright)", path.name, re.I) for path in candidates):
@@ -177,11 +213,11 @@ def runtime_keg(source, prefix):
         raise ValueError("Only liblzma is audited from xz; another component needs review")
     family, keg_version = relative.parts[:2]
     if family in AUDITED_RUNTIME_COMPONENTS:
-        version, filename = AUDITED_RUNTIME_COMPONENTS[family]
+        version, filenames = AUDITED_RUNTIME_COMPONENTS[family]
         if (not re.fullmatch(re.escape(version) + r"(?:_[1-9]\d*)?", keg_version)
-                or relative.parts[2:] != ("lib", filename)):
+                or relative.parts[2:] not in {("lib", name) for name in filenames}):
             raise ValueError(f"Unaudited runtime component: {relative.as_posix()}; "
-                             f"only source {version}, lib/{filename} is audited")
+                             f"only source {version}, lib components {filenames} are audited")
     elif family not in APPROVED_FORMULAS:
         raise ValueError(f"Unreviewed runtime formula/license: {family}")
     return cellar / relative.parts[0] / relative.parts[1]
@@ -359,6 +395,11 @@ Type=Fixed
                     if not archive.is_file() or sha256(archive) != entry["sha256"]:
                         raise ValueError(f"Missing/hash-mismatched source archive: {archive}")
                     copy_archive_licenses(archive, directory)
+                if formula == "webp":
+                    require_webp_recipe(keg / ".brew" / "webp.rb", entries)
+                    copy_webp_notices(self.source_dir / source_filename(entries[0]), directory)
+            elif formula == "webp":
+                raise ValueError("WebP requires its exact source archive and legal notices")
             has_bottle_text = any(re.match(r"^(copying|licen[sc]e|copyright)", p.name, re.I) for p in candidates)
             has_source_text = any(p.is_file() and re.match(r"^(copying|licen[sc]e|copyright)", p.name, re.I)
                                   for p in directory.rglob("*"))
