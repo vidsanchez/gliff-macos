@@ -7,10 +7,10 @@ this repository contains only the Mac client.
 
 ## Install the app
 
-Release candidates will be distributed through [Releases](https://github.com/vidsanchez/gliff-macos/releases)
-as `Gliff-<version>-arm64.zip`, with `SHA256SUMS` and `build-report.json`.
-**Intel is unsupported, and there is no universal minimum macOS version:** check
-the measured minimum in the report for **each artifact** before downloading.
+The **0.1.0-alpha.1 experimental prerelease** targets **Apple Silicon, macOS 15.0+**.
+Download `Gliff-0.1.0-alpha.1-arm64.zip`, `SHA256SUMS`, and `build-report.json`
+from [its release page](https://github.com/vidsanchez/gliff-macos/releases/tag/v0.1.0-alpha.1).
+Intel is unsupported. Check each future artifact's report: its minimum may change.
 
 1. Check the ZIP against `SHA256SUMS` (`shasum -a 256 file.zip`).
 2. Extract it and move `Gliff.app` to Applications.
@@ -25,13 +25,14 @@ the measured minimum in the report for **each artifact** before downloading.
 
 The package attempts to include the necessary GTK libraries and resources.
 **Operation without Homebrew remains unverified until clean-machine QA passes.**
-The first alpha is not stable or production-audited. See the
+The downloaded bundle passed user checks for opening, connecting to Linux, video,
+typing, and copy/paste on Apple Silicon macOS 27.0.1. This is not a compatibility
+matrix or a clean-machine result. The alpha is not stable or production-audited. See the
 [release notes](CHANGELOG.md) and [distribution status](docs/distribution.md).
 
-## Homebrew (prepared, not yet available)
+## Homebrew
 
-The workflow generates a cask from the **real ZIP and SHA**. These commands will
-work only after that exact asset is published and its cask is added to the repository:
+Install using this repository's Homebrew tap:
 
 ```sh
 brew tap vidsanchez/gliff-macos https://github.com/vidsanchez/gliff-macos
@@ -39,7 +40,7 @@ brew install --cask vidsanchez/gliff-macos/gliff-macos
 ```
 
 The cask preserves quarantine and macOS security checks; it does not bypass
-Gatekeeper. No installable cask has been published yet. See
+Gatekeeper. See
 [tap maintenance](docs/distribution.md#homebrew).
 
 ## Keyboard and privacy

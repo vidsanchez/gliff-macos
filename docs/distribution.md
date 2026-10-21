@@ -1,9 +1,22 @@
 # Experimental distribution
 
-**Status:** the pipeline is prepared; QA of the downloaded bundle on a Mac
-without Homebrew remains pending. Synthetic tests do not establish proven
-portability. There is no Developer ID or notarization. CI does not create or
-publish a release.
+**Status:** 0.1.0-alpha.1 is an **experimental prerelease**, not a stable or
+proven-portable release. The downloaded `b7b1417f` bundle passed user checks for
+opening, connecting to Linux, video, typing, and copy/paste on Apple Silicon
+macOS 27.0.1. The latest test did not record an exact server version or keyboard
+layout. Reconnects and opt-in system capture/permissions were not newly tested.
+**A clean Mac without Homebrew remains untested.** The bundle's measured minimum
+is macOS 15.0, not a claim of human testing on macOS 15. There is no Developer ID
+or notarization. CI does not create or publish a release.
+
+[CI run 39587341227](https://github.com/vidsanchez/gliff-macos/actions/runs/39587341227)
+built exact source commit `b7b1417fd0e8b2d51b20847a3d5b8e5bf8e8a4a8`:
+52 Python tests and 184 Rust tests passed, including four native VideoToolbox
+integration tests; one Rust test was ignored. The release tag stays on that
+source commit; later documentation/cask commits on main do not retag the app.
+Build reports and validation assets remain immutable build-time evidence;
+release notes record subsequent user QA and publication status. Their pending
+fields must not be edited to relabel later checks.
 
 ## Create a candidate
 
@@ -149,8 +162,9 @@ Cargo inventory. Unpinned HTTPS sources fail the process. CI generates a lock
 for **its own** dependencies; it does not reuse another Mac's lock.
 
 Before distribution, review recipe-to-installed-bottle correspondence and notices.
-Upload the ZIP, `SHA256SUMS`, report, lock, and complete corresponding-source
-archive to the **same release**. The app sources/scripts must match the published
+Upload all eight verified assets to the **same release**: the ZIP, `SHA256SUMS`,
+`build-report.json`, `relocated-validation.json`, `source-lock.json`,
+`third-party-sources.tar.gz`, `icon-validation.json`, and generated `gliff-macos.rb`. The app sources/scripts must match the published
 tag exactly. This provides sources alongside binaries, not a written three-year offer.
 
 Normative references: [LGPL 2.1, §§4 and 6](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
@@ -173,29 +187,36 @@ subprocesses with a forced unavailable display backend, no display/window and
 then requires every actual UI icon to resolve by its own name at multiple sizes
 and scales; an unknown icon must resolve to `image-missing`. Results are retained
 in `icon-validation.json`. This no-window check does not replace Finder/rendering,
-connection, or clean-machine QA; the failed candidate is not publishable.
+connection, or clean-machine QA. The old `0a268eab` candidate was never released
+and must never be published; the replacement `b7b1417f` passed the scoped user
+checks recorded above.
 
 ## Manual gate before publishing the app
 
-- [ ] Independent diff review and green CI for the exact commit/tag.
+- [x] Independent diff review and green CI for the exact release-source commit.
 - [ ] Download **that** ZIP, verify its checksum, and extract/move it to a path
       containing spaces on an Apple Silicon Mac without Homebrew (or a clean VM),
       running at least the report's measured minimum. Open from Finder, not cargo/Terminal.
 - [ ] Keep Gatekeeper protections. Only if the source is trusted, use Apple's
       [Open Anyway procedure](https://support.apple.com/102445). Do not remove
       quarantine in bulk or disable Gatekeeper.
-- [ ] Check the window/address/recents, icons/fonts, preconfigured SSH, video/mouse,
-      reconnects, keyboard, and synthetic-text clipboard in both directions.
-      Command+C/V in foot/Omarchy was confirmed in development, not in this ZIP.
+- [x] User confirmed the downloaded replacement opens, connects to Linux, displays
+      video, and supports typing and copy/paste on Apple Silicon macOS 27.0.1.
+- [ ] Extend QA to recents, fonts, mouse, reconnects, both clipboard directions,
+      and a recorded server/layout matrix. The confirmation above does not
+      establish these details. Earlier foot/Omarchy Command+C/V testing was a
+      separate development check, not a universal terminal-shortcut guarantee.
 - [ ] Without the flag: no prompt/tap. Manually test opt-in capture, identity/
       permissions, and Shift+Esc using [security](security.md), never CI tests.
-- [ ] Make exact sources/recipes/notices available in the same release; verify
-      SHA256SUMS for both the app and `third-party-sources.tar.gz`.
+- [x] Published exact sources/recipes/notices in the same experimental prerelease.
+      Anonymous downloads of all eight release assets matched the verified CI
+      bytes, sizes, and SHA-256 values; `SHA256SUMS` verified both archives.
 - [ ] Record actual macOS, architecture, GTK version, and results. Keep outstanding
       limits in release notes; never mark an untested item as passed.
 
-Without clean-machine QA, describe only an experimental candidate with explicit
-warnings; do not advertise proven operation without Homebrew.
+Outstanding checks above remain open. Publication without clean-machine QA is
+limited to an explicitly experimental prerelease with these warnings, not a
+stable release or a promise of operation without Homebrew.
 
 ## CI
 
@@ -239,6 +260,15 @@ This same repository can serve as a tap with an explicit URL. No additional
 repository is required, and inclusion in official Homebrew Cask is not claimed.
 See the [tap format](https://docs.brew.sh/Taps.html) and [Cask Cookbook](https://docs.brew.sh/Cask-Cookbook).
 
+Install the experimental Apple Silicon app (macOS 15.0+) with:
+
+```sh
+brew tap vidsanchez/gliff-macos https://github.com/vidsanchez/gliff-macos
+brew install --cask vidsanchez/gliff-macos/gliff-macos
+```
+
+### Cask maintenance
+
 ```sh
 python3 scripts/generate-cask.py dist/release/build-report.json \
   --archive dist/release/Gliff-0.1.0-alpha.1-arm64.zip \
@@ -259,6 +289,6 @@ without tapping, installing, or publishing locally.
 Only after the gates pass, **that ZIP** is published, and its remote checksum is
 verified may the maintainer add the generated file as `Casks/gliff-macos.rb` and
 commit it. Never publish an example hash or a cask with an unavailable URL.
-The cask has no `postflight`, `zap`, quarantine bypass, or TCC writes. Until these
-steps are complete, the README's installation commands are future instructions,
-not a promise of current availability.
+The cask has no `postflight`, `zap`, quarantine bypass, or TCC writes. The initial
+cask matches the anonymously verified v0.1.0-alpha.1 ZIP exactly; retain this
+verification gate for every future update.
