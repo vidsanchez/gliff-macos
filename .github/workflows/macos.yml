@@ -54,12 +54,21 @@ jobs:
           test -s "$keymap_dir/altgr.xkb"
           python3 scripts/validate-keymap.py "$(brew --prefix libxkbcommon)/lib/libxkbcommon.0.dylib" "$keymap_dir"
           cargo build --offline --locked --release -p gliff
-      - name: Exact corresponding source archives
+      - name: Rebuild exact Cairo source without LZO
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/fetch-sources.py dist/cairo-reference-lock.json --output dist/sources --download
           python3 scripts/build-cairo.py --source-dir dist/sources --reference-lock dist/cairo-reference-lock.json --output dist/cairo-build --brew-prefix "$(brew --prefix)"
+      - name: Audit complete known runtime closure (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit-runtime.py --output dist/closure-diagnostics --brew-prefix "$(brew --prefix)" --cairo-prefix dist/cairo-build/prefix
+      - name: Exact corresponding source archives
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 scripts/package-macos.py --plan-sources --output dist/source-plan --brew-prefix "$(brew --prefix)" --cairo-prefix dist/cairo-build/prefix
           python3 scripts/fetch-sources.py dist/source-plan/source-lock.json --output dist/sources --download
       - name: Package and verify candidate without opening GUI
@@ -96,3 +105,11 @@ jobs:
             dist/release/source-lock.json
             dist/release/relocated-validation.json
             dist/release/gliff-macos.rb
+      - name: Upload failed runtime diagnostic, never an app
+        if: ${{ failure() && hashFiles('dist/closure-diagnostics/runtime-closure.json') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gliff-macos-runtime-diagnostic
+          if-no-files-found: error
+          retention-days: 7
+          path: dist/closure-diagnostics/runtime-closure.json

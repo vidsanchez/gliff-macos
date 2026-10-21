@@ -163,6 +163,40 @@ def require_crate_license(package, candidates):
         raise ValueError(f"Missing license text: {package['name']} {package['version']}")
 
 
+def runtime_keg(source, prefix):
+    source = source.resolve()
+    cellar = prefix / "Cellar"
+    if not source.is_relative_to(cellar):
+        raise ValueError(f"Non-Apple dependency outside Homebrew Cellar: {source}")
+    relative = source.relative_to(cellar)
+    if len(relative.parts) < 3:
+        raise ValueError(f"Not a formula file: {source}")
+    if relative.parts[0] == "gettext" and source.name != "libintl.8.dylib":
+        raise ValueError("Only LGPL libintl is audited from gettext; another component needs review")
+    if relative.parts[0] == "xz" and not source.name.startswith("liblzma."):
+        raise ValueError("Only liblzma is audited from xz; another component needs review")
+    family, keg_version = relative.parts[:2]
+    if family in AUDITED_RUNTIME_COMPONENTS:
+        version, filename = AUDITED_RUNTIME_COMPONENTS[family]
+        if (not re.fullmatch(re.escape(version) + r"(?:_[1-9]\d*)?", keg_version)
+                or relative.parts[2:] != ("lib", filename)):
+            raise ValueError(f"Unaudited runtime component: {relative.as_posix()}; "
+                             f"only source {version}, lib/{filename} is audited")
+    elif family not in APPROVED_FORMULAS:
+        raise ValueError(f"Unreviewed runtime formula/license: {family}")
+    return cellar / relative.parts[0] / relative.parts[1]
+
+
+def runtime_binary_seeds(prefix):
+    """Production module/helper inputs, also used by the read-only diagnostic."""
+    for pattern in ("lib/gdk-pixbuf-2.0/*/loaders/*.so", "lib/gdk-pixbuf-2.0/*/loaders/*.dylib",
+                    "lib/gio/modules/*.so", "lib/gio/modules/*.dylib",
+                    "lib/gtk-4.0/*/printbackends/*.so", "lib/gtk-4.0/*/immodules/*.so"):
+        for source in sorted(prefix.glob(pattern)):
+            yield source, Path("Resources") / source.relative_to(prefix)
+    yield prefix / "bin/gdk-pixbuf-query-loaders", Path("MacOS/gdk-pixbuf-query-loaders")
+
+
 class Bundle:
     def __init__(self, app, prefix, source_dir=None, cairo_prefix=None):
         self.app = app
@@ -182,27 +216,7 @@ class Bundle:
         verify_build_report(self.cairo_report, self.cairo_reference)
 
     def remember_keg(self, source):
-        source = source.resolve()
-        cellar = self.prefix / "Cellar"
-        if not source.is_relative_to(cellar):
-            raise ValueError(f"Non-Apple dependency outside Homebrew Cellar: {source}")
-        relative = source.relative_to(cellar)
-        if len(relative.parts) < 3:
-            raise ValueError(f"Not a formula file: {source}")
-        if relative.parts[0] == "gettext" and source.name != "libintl.8.dylib":
-            raise ValueError("Only LGPL libintl is audited from gettext; another component needs review")
-        if relative.parts[0] == "xz" and not source.name.startswith("liblzma."):
-            raise ValueError("Only liblzma is audited from xz; another component needs review")
-        family, keg_version = relative.parts[:2]
-        if family in AUDITED_RUNTIME_COMPONENTS:
-            version, filename = AUDITED_RUNTIME_COMPONENTS[family]
-            if (not re.fullmatch(re.escape(version) + r"(?:_[1-9]\d*)?", keg_version)
-                    or relative.parts[2:] != ("lib", filename)):
-                raise ValueError(f"Unaudited runtime component: {relative.as_posix()}; "
-                                 f"only source {version}, lib/{filename} is audited")
-        elif family not in APPROVED_FORMULAS:
-            raise ValueError(f"Unreviewed runtime formula/license: {family}")
-        self.kegs.add(cellar / relative.parts[0] / relative.parts[1])
+        self.kegs.add(runtime_keg(source, self.prefix))
 
     def copy_binary(self, source, destination=None):
         source = source.resolve()
@@ -267,13 +281,8 @@ class Bundle:
 
     def resources_copy(self):
         # Copy dynamic modules separately so close() audits their own dylib graph.
-        for pattern in ("lib/gdk-pixbuf-2.0/*/loaders/*.so", "lib/gdk-pixbuf-2.0/*/loaders/*.dylib",
-                        "lib/gio/modules/*.so", "lib/gio/modules/*.dylib",
-                        "lib/gtk-4.0/*/printbackends/*.so", "lib/gtk-4.0/*/immodules/*.so"):
-            for source in sorted(self.prefix.glob(pattern)):
-                self.copy_binary(source, self.resources / source.relative_to(self.prefix))
-        self.copy_binary(self.prefix / "bin/gdk-pixbuf-query-loaders",
-                         self.contents / "MacOS/gdk-pixbuf-query-loaders")
+        for source, relative in runtime_binary_seeds(self.prefix):
+            self.copy_binary(source, self.contents / relative)
         schemas = self.resources / "share/glib-2.0/schemas"
         for formula in ("gtk4", "libadwaita"):
             source = self.prefix / "opt" / formula / "share/glib-2.0/schemas"

@@ -165,6 +165,33 @@ or secrets. [GitHub documents runner architectures](https://docs.github.com/en/a
 Runners and Homebrew change: the artifact report is authoritative, not the runner
 name or an arbitrary `MACOSX_DEPLOYMENT_TARGET`.
 
+## Inspect a rejected dependency graph
+
+CI runs `scripts/audit-runtime.py` after the exact Cairo rebuild and before
+source planning. It reads the same executable/module/helper seeds as production
+and follows every resolvable non-Apple Mach-O import, including rejected families.
+Unknown components remain rejected: discovery is not redistribution approval.
+
+On failure, the separate `gliff-macos-runtime-diagnostic` artifact retains
+`runtime-closure.json` for seven days. It contains resolved paths, parent/import
+edges, all policy rejections, traversal errors, and bounded installed recipe and
+receipt snapshots with SHA-256. It does not capture the environment, credentials,
+or arbitrary user files. `complete: false` means some evidence or graph traversal
+failed; even `complete: true` covers only known imports/seeds, not arbitrary
+`dlopen` or GUI resource behavior.
+
+For a local report, with a verified Cairo prefix and a release binary present:
+
+```sh
+python3 scripts/audit-runtime.py --output dist/closure-diagnostics --cairo-prefix dist/cairo-build/prefix
+```
+
+The command writes only a **fresh JSON diagnostic directory**, never an app,
+source archive, signature, or approval file. Any rejection/error exits nonzero.
+It does not execute inspected binaries, evaluate recipes, install, or download.
+The normal package/source-plan gates are unchanged; review the exact reported
+source version, recipes, licenses, and components before editing an allowlist.
+
 ## Homebrew
 
 This same repository can serve as a tap with an explicit URL. No additional
