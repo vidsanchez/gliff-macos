@@ -41,6 +41,24 @@ WEBP_SOURCE_SHA256 = "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e3
 WEBP_SOURCE_URL = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz"
 LICENSE_RE = re.compile(r"^(copying|licen[sc]e|copyright|notice|authors)([._-].*)?$", re.I)
 
+# Original metadata must expose GTK's embedded missing-image resource directory.
+ICON_THEME_INDEX = """[Icon Theme]
+Name=Gliff fallback
+Comment=Original Gliff application artwork
+Hidden=true
+Directories=16x16/status,1024x1024/apps
+
+[1024x1024/apps]
+Size=1024
+Context=Applications
+Type=Fixed
+
+[16x16/status]
+Size=16
+Context=Status
+Type=Fixed
+"""
+
 
 def run(*args, cwd=None):
     return subprocess.check_output([str(a) for a in args], text=True, cwd=cwd).strip()
@@ -325,20 +343,10 @@ class Bundle:
             self.copy_data(source, schemas, required=formula == "gtk4")
         run(self.prefix / "bin/glib-compile-schemas", schemas)
         # Original minimal metadata, NOT the GPL-licensed hicolor index.theme.
-        # No third-party icon theme is copied. GTK supplies built-in symbols.
+        # No third-party theme is copied. Keep embedded GTK fallback resources visible.
         theme = self.resources / "share/icons/hicolor"
         (theme / "1024x1024/apps").mkdir(parents=True)
-        (theme / "index.theme").write_text("""[Icon Theme]
-Name=Gliff fallback
-Comment=Original Gliff application artwork
-Hidden=true
-Directories=1024x1024/apps
-
-[1024x1024/apps]
-Size=1024
-Context=Applications
-Type=Fixed
-""")
+        (theme / "index.theme").write_text(ICON_THEME_INDEX)
         shutil.copy2(ROOT / "resources/gliff.png", theme / "1024x1024/apps/gliff.png")
         fonts = self.resources / "etc/fonts"
         fonts.mkdir(parents=True)

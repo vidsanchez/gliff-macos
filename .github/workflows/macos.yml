@@ -87,6 +87,7 @@ jobs:
           ditto -x -k dist/release/Gliff-*-arm64.zip "$RUNNER_TEMP/moved app QA"
           python3 scripts/package-macos.py --validate "$RUNNER_TEMP/moved app QA/Gliff.app" > dist/release/relocated-validation.json
           codesign --verify --deep --strict "$RUNNER_TEMP/moved app QA/Gliff.app"
+          python3 scripts/validate-icons.py --gtk-library "$RUNNER_TEMP/moved app QA/Gliff.app/Contents/Frameworks/libgtk-4.1.dylib" --icons-dir "$RUNNER_TEMP/moved app QA/Gliff.app/Contents/Resources/share/icons" --source crates/gliff/src/main.rs > dist/release/icon-validation.json
           mkdir -p "$RUNNER_TEMP/gliff-test-home/Library/Caches"
           env -i HOME="$RUNNER_TEMP/gliff-test-home" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
             "$RUNNER_TEMP/moved app QA/Gliff.app/Contents/MacOS/Gliff" --version
@@ -104,6 +105,7 @@ jobs:
             dist/release/build-report.json
             dist/release/source-lock.json
             dist/release/relocated-validation.json
+            dist/release/icon-validation.json
             dist/release/gliff-macos.rb
       - name: Upload failed runtime diagnostic, never an app
         if: ${{ failure() && hashFiles('dist/closure-diagnostics/runtime-closure.json') != '' }}

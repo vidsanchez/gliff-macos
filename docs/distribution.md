@@ -158,6 +158,23 @@ and [LGPL 3, §4](https://www.gnu.org/licenses/lgpl-3.0.html). Compatible replac
 libraries can be used; re-sign ad-hoc and validate afterwards. This is a technical
 checklist, not a claim of professional legal review.
 
+## Startup icon regression gate
+
+The first candidate passed static checks but failed user startup QA: the original
+minimal hicolor index hid GTK's embedded `16x16/status/image-missing.png`.
+GTK 4.22.4 retries that missing fallback recursively. The original metadata now
+exposes that resource directory; no third-party theme/index/artwork is copied.
+The monitor button uses an existing GTK built-in symbol instead of assuming an
+external desktop icon theme supplies it. The original application artwork is unchanged.
+
+CI now runs `validate-icons.py` against the **relocated bundled GTK**, in isolated
+subprocesses with a forced unavailable display backend, no display/window and
+15-second timeouts. It safely rejects the old index before a recursive lookup,
+then requires every actual UI icon to resolve by its own name at multiple sizes
+and scales; an unknown icon must resolve to `image-missing`. Results are retained
+in `icon-validation.json`. This no-window check does not replace Finder/rendering,
+connection, or clean-machine QA; the failed candidate is not publishable.
+
 ## Manual gate before publishing the app
 
 - [ ] Independent diff review and green CI for the exact commit/tag.

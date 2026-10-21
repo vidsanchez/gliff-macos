@@ -320,7 +320,7 @@ fn build_ui(app: &adw::Application, cli: &Cli) {
         .icon_name("view-fullscreen-symbolic")
         .build();
     let stats_btn = gtk::ToggleButton::builder()
-        .icon_name("utilities-system-monitor-symbolic")
+        .icon_name("emblem-system-symbolic")
         .tooltip_text("Show stats")
         .build();
     let tabs = gtk::Box::builder().spacing(6).build();
