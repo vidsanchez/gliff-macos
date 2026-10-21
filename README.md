@@ -5,6 +5,13 @@ This independent adaptation of [Kevin McConnell's original Gliff](https://github
 (v0.4.0) is not an official upstream release. Install the Linux server separately;
 this repository contains only the Mac client.
 
+## Demo
+
+[![Gliff for macOS displaying a remote Linux desktop](docs/media/gliff-demo.png)](docs/media/gliff-demo.mp4)
+
+Click the thumbnail to open the [70-second demo video](docs/media/gliff-demo.mp4)
+(MP4, 4.7 MiB).
+
 ## Install the app
 
 The **0.1.0-alpha.1 experimental prerelease** targets **Apple Silicon, macOS 15.0+**.

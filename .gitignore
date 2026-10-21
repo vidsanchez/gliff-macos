@@ -5,3 +5,4 @@
 __pycache__/
 *.pyc
 !/resources/gliff.png
+!/docs/media/gliff-demo.png
