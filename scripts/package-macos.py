@@ -17,6 +17,7 @@ import sys
 import tomllib
 import tarfile
 import zipfile
+from cairo_reference import read_reference, require_reference, verify_build_report
 
 ROOT = Path(__file__).resolve().parents[1]
 APPLE = ("/System/Library/", "/usr/lib/")
@@ -169,12 +170,9 @@ class Bundle:
         self.cairo_prefix = cairo_prefix.resolve() if cairo_prefix else None
         if not self.cairo_prefix:
             raise ValueError("A verified --cairo-prefix built without LZO is mandatory")
-        if (self.prefix / "opt/cairo").resolve().name != "1.18.6":
-            raise ValueError("Installed Cairo source/ABI reference must be 1.18.6; review version changes")
+        self.cairo_reference = read_reference(self.prefix)
         self.cairo_report = json.loads((self.cairo_prefix / "cairo-build.json").read_text())
-        if (self.cairo_report.get("version") != "1.18.6" or self.cairo_report.get("lzo") != "disabled"
-                or self.cairo_report.get("source_sha256") != "1c767308174337a74694da0f3ec069c271452163a1ef4540964c50c301f157d4"):
-            raise ValueError("Unexpected Cairo override source/version/configuration")
+        verify_build_report(self.cairo_report, self.cairo_reference)
 
     def remember_keg(self, source):
         source = source.resolve()
@@ -300,17 +298,23 @@ Type=Fixed
         self.close()
 
     def source_plan(self):
+        require_reference(self.cairo_reference, self.prefix)
         entries = []
         for keg in sorted(self.kegs):
             recipe = keg / ".brew" / (keg.parent.name + ".rb")
-            entries.extend(recipe_sources(recipe, keg.parent.name, keg.name))
+            if keg.parent.name == "cairo":
+                if keg.name != self.cairo_reference["keg_version"]:
+                    raise ValueError("Cairo source inventory differs from the rebuilt reference")
+                entries.append(self.cairo_reference["source"])
+            else:
+                entries.extend(recipe_sources(recipe, keg.parent.name, keg.name))
         lock = tomllib.loads((ROOT / "Cargo.lock").read_text())
         for package in lock["package"]:
             if package.get("source", "").startswith("registry+"):
                 entries.append({"name": package["name"], "version": package["version"], "kind": "cargo",
                     "url": f"https://static.crates.io/crates/{package['name']}/{package['name']}-{package['version']}.crate",
                     "sha256": package["checksum"]})
-        return {"format": 1, "sources": entries}
+        return {"format": 1, "cairo_reference": self.cairo_reference, "sources": entries}
 
     def licenses(self):
         dest = self.resources / "licenses"
@@ -357,6 +361,10 @@ Type=Fixed
             inventory["homebrew"].append({"name": formula, "version": keg.name,
                 "source_urls": source_urls, "recipe_sha256": sha256(recipe),
                 "source_archive_distribution_gate": "pending: retain and publish corresponding source archives"})
+            if formula == "cairo":
+                inventory["homebrew"][-1].update({"source_version": self.cairo_reference["version"],
+                    "source_urls": [self.cairo_reference["source"]["url"]],
+                    "source_sha256": self.cairo_reference["source"]["sha256"]})
         metadata = json.loads(run("cargo", "metadata", "--offline", "--locked", "--filter-platform", "aarch64-apple-darwin", "--format-version", "1", cwd=ROOT))
         for package in metadata["packages"]:
             source = Path(package["manifest_path"]).parent
@@ -372,10 +380,12 @@ Type=Fixed
                 shutil.copy2(path, target)
             inventory["cargo"].append({"name": package["name"], "version": package["version"],
                 "license": package.get("license"), "repository": package.get("repository")})
-        shutil.copy2(ROOT / "scripts/build-cairo.py", dest / "build-cairo.py")
+        for name in ("build-cairo.py", "cairo_reference.py", "cairo-source.json"):
+            shutil.copy2(ROOT / "scripts" / name, dest / name)
         shutil.copy2(self.cairo_prefix / "cairo-build.json", dest / "cairo-build.json")
         for name in ("LICENSE", "NOTICE", "ATTRIBUTION.md", "Cargo.lock"):
             shutil.copy2(ROOT / name, dest)
+        require_reference(self.cairo_reference, self.prefix)
         (dest / "third-party.json").write_text(json.dumps(inventory, indent=2) + "\n")
         return inventory
 

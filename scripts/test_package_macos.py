@@ -230,16 +230,17 @@ class PackagerTests(unittest.TestCase):
             root = Path(tmp)
             source = root / "wrong.tar"
             source.write_bytes(b"not the pinned source")
+            reference = {"version": "1.18.6", "source": {"sha256": "a" * 64}}
             with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
-                cairo.extract_source(source, root / "unpacked")
+                cairo.extract_source(source, root / "unpacked", reference)
             self.assertFalse((root / "unpacked").exists())
             with tarfile.open(source, "w") as out:
                 info = tarfile.TarInfo("../../oops")
                 info.size = 1
                 out.addfile(info, io.BytesIO(b"x"))
-            with patch.object(cairo, "SOURCE_SHA256", fetch.digest(source)):
-                with self.assertRaisesRegex(ValueError, "Unsafe source archive path"):
-                    cairo.extract_source(source, root / "unpacked")
+            reference["source"]["sha256"] = fetch.digest(source)
+            with self.assertRaisesRegex(ValueError, "Unsafe source archive path"):
+                cairo.extract_source(source, root / "unpacked", reference)
             self.assertFalse((root.parent / "oops").exists())
 
     def test_cairo_abi_audit_rejects_missing_exports_and_lzo(self):

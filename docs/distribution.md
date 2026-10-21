@@ -13,8 +13,9 @@ From the root of this independent checkout, with dependencies already installed:
 cargo build --offline --locked --release -p gliff
 python3 -m unittest discover -s scripts -p 'test_*.py' -v
 # Additional development tools: Meson and Ninja.
-python3 scripts/fetch-sources.py scripts/cairo-source.json --output dist/sources --download
-python3 scripts/build-cairo.py dist/sources/1c767308174337a74694da0f3ec069c271452163a1ef4540964c50c301f157d4-cairo-1.18.6.source --output dist/cairo-build
+python3 scripts/build-cairo.py --plan-source dist/cairo-reference-lock.json
+python3 scripts/fetch-sources.py dist/cairo-reference-lock.json --output dist/sources --download
+python3 scripts/build-cairo.py --source-dir dist/sources --reference-lock dist/cairo-reference-lock.json --output dist/cairo-build
 python3 scripts/package-macos.py --plan-sources --output dist/source-plan --cairo-prefix dist/cairo-build/prefix
 # This explicit action uses the network for sources, never installation/execution.
 python3 scripts/fetch-sources.py dist/source-plan/source-lock.json --output dist/sources --download
@@ -40,7 +41,8 @@ It does not extract arbitrary tar/ZIP paths or execute downloaded contents.
 - arm64 only. The largest `minos`/`LC_VERSION_MIN_MACOSX` across **all** Mach-O
   files, including helpers/loaders, determines `LSMinimumSystemVersion` and the
   report. The executable's target can be lower than its libraries' targets.
-- Cairo **1.18.6 rebuilt from exact source** with `-Dlzo=disabled`, retaining the
+- Cairo rebuilt from **the installed reference's exact source** with
+  `-Dlzo=disabled`, retaining the
   script interpreter and three consistent libraries. The build checks every
   exported symbol against the original installation and records source/options.
   It does not modify Homebrew. LZO and unreviewed formula families are rejected.
@@ -66,6 +68,25 @@ Cairo is rebuilt because GTK links `libcairo-script-interpreter`, whose local
 bottle pulls in GPL LZO. Deleting that dylib or disabling the interpreter would
 break GTK; disabling optional LZO preserves its API. Review source/hash/API
 explicitly before changing the lock for a different Cairo version.
+
+The installed receipt, keg revision, recipe, and three reference-library hashes
+are bound into `cairo-reference-lock.json`. Only audited source versions 1.18.4
+and 1.18.6 are accepted; Homebrew revisions such as `1.18.6_1` are distinguished
+from the source version. Installed recipe URL/SHA must match the pinned official
+release, without evaluating Ruby or consulting a newer formula API. Unknown
+versions, patches/resources, ambiguous metadata, or changed reference evidence
+fail closed with the actual keg/version in the diagnostic. CI prints this
+reference before expensive compilation. The final inventory records that same
+source version/hash; it never labels a 1.18.6 build as 1.18.4 source.
+
+An older Cairo build report without this reference binding is not a valid
+candidate. Rebuild from the selected verified source; do not retrofit its
+metadata by hand or bypass the version/source guards. `--audit-only` only
+revalidates a report that already has matching reference evidence.
+
+Official source/hash and optional-LZO evidence:
+[Cairo 1.18.4 release](https://cairographics.org/news/cairo-1.18.4/),
+[Cairo 1.18.6 release](https://www.cairographics.org/news/cairo-1.18.6/).
 
 Static analysis does not prove arbitrary `dlopen` paths, rendering/fonts,
 Finder/TCC, SSH connections, file pickers, or clean-machine behavior. That limit
