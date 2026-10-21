@@ -1,0 +1,7 @@
+/target/
+/dist/
+.codegraph/
+.DS_Store
+__pycache__/
+*.pyc
+!/resources/gliff.png

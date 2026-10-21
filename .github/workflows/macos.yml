@@ -1,0 +1,96 @@
+name: macOS candidate
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  arm64:
+    # Public-repo standard macos-15 is arm64. Assert rather than silently ship Intel.
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      MACOSX_DEPLOYMENT_TARGET: '15.0'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Toolchain and development libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          brew install gtk4 libadwaita pkgconf meson ninja libxkbcommon
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add rustfmt clippy
+          rustc --version
+          pkg-config --modversion gtk4 libadwaita-1
+      - name: Static and synthetic checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fetch --locked
+          python3 scripts/check-isolation.py
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          python3 scripts/check-msrv.py
+          rustup toolchain install 1.92.0 --profile minimal
+          cargo +1.92.0 check --offline --locked --workspace --all-targets
+          cargo fmt --all --check
+          cargo clippy --offline --locked --workspace --all-targets -- -D warnings
+          cargo test --offline --locked --workspace
+          keymap_dir="$(mktemp -d "$RUNNER_TEMP/gliff-keymap.XXXXXX")"
+          GLIFF_TEST_KEYMAP_DIR="$keymap_dir" cargo test --offline --locked -p gliff keymap::tests::export_xkb_fixtures_for_optional_native_validator -- --exact
+          test -s "$keymap_dir/alt.xkb"
+          test -s "$keymap_dir/altgr.xkb"
+          python3 scripts/validate-keymap.py "$(brew --prefix libxkbcommon)/lib/libxkbcommon.0.dylib" "$keymap_dir"
+          cargo build --offline --locked --release -p gliff
+      - name: Exact corresponding source archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch-sources.py scripts/cairo-source.json --output dist/sources --download
+          python3 scripts/build-cairo.py dist/sources/1c767308174337a74694da0f3ec069c271452163a1ef4540964c50c301f157d4-cairo-1.18.6.source --output dist/cairo-build --brew-prefix "$(brew --prefix)"
+          python3 scripts/package-macos.py --plan-sources --output dist/source-plan --brew-prefix "$(brew --prefix)" --cairo-prefix dist/cairo-build/prefix
+          python3 scripts/fetch-sources.py dist/source-plan/source-lock.json --output dist/sources --download
+      - name: Package and verify candidate without opening GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/package-macos.py --output dist/release --source-dir dist/sources --brew-prefix "$(brew --prefix)" --cairo-prefix dist/cairo-build/prefix
+          cmp dist/source-plan/source-lock.json dist/release/source-lock.json
+          python3 scripts/generate-cask.py dist/release/build-report.json --archive dist/release/Gliff-*-arm64.zip --output dist/release/gliff-macos.rb
+          ruby -c dist/release/gliff-macos.rb
+          python3 scripts/fetch-sources.py dist/release/source-lock.json --output dist/sources \
+            --archive dist/release/third-party-sources.tar.gz \
+            --recipes dist/release/Gliff.app/Contents/Resources/licenses
+          (cd dist/release && shasum -a 256 -c SHA256SUMS)
+          mkdir -p "$RUNNER_TEMP/moved app QA"
+          ditto -x -k dist/release/Gliff-*-arm64.zip "$RUNNER_TEMP/moved app QA"
+          python3 scripts/package-macos.py --validate "$RUNNER_TEMP/moved app QA/Gliff.app" > dist/release/relocated-validation.json
+          codesign --verify --deep --strict "$RUNNER_TEMP/moved app QA/Gliff.app"
+          mkdir -p "$RUNNER_TEMP/gliff-test-home/Library/Caches"
+          env -i HOME="$RUNNER_TEMP/gliff-test-home" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+            "$RUNNER_TEMP/moved app QA/Gliff.app/Contents/MacOS/Gliff" --version
+      - name: Upload candidate, never publish a release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gliff-macos-arm64-candidate
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+          path: |
+            dist/release/Gliff-*-arm64.zip
+            dist/release/third-party-sources.tar.gz
+            dist/release/SHA256SUMS
+            dist/release/build-report.json
+            dist/release/source-lock.json
+            dist/release/relocated-validation.json
+            dist/release/gliff-macos.rb

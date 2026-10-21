@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/gliff-proto",
+    "crates/gliff-transport",
+    "crates/gliff-sw",
+    "crates/gliff",
+]
+default-members = ["crates/gliff"]
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+edition = "2021"
+license = "MIT"
+rust-version = "1.92"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+
+[workspace.dependencies]
+gliff-proto = { path = "crates/gliff-proto" }
+gliff-transport = { path = "crates/gliff-transport" }
+gliff-sw = { path = "crates/gliff-sw" }
+
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1", features = ["derive"] }
+minicbor = { version = "2", features = ["derive", "alloc"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "sync", "time", "io-std", "fs"] }
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+rayon = "1"
+proptest = "1"
+
+gtk4 = { version = "0.11", features = ["v4_14"] }
+libadwaita = { version = "0.9", features = ["v1_5"] }

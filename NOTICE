@@ -1,0 +1,12 @@
+Gliff for macOS derives from Gliff 0.4.0 by Kevin McConnell (MIT).
+See LICENSE and ATTRIBUTION.md; preserve upstream attribution.
+
+The macOS client uses Apple's system VideoToolbox/CoreMedia/CoreVideo frameworks
+for H.264 decoding. It does not bundle or download OpenH264 or another codec
+module. Apple selects the decoder; hardware acceleration is not guaranteed.
+No patent license, royalty coverage, or legal warranty is asserted by this fork.
+Distributors and users must assess applicable licensing obligations separately.
+
+The bundle's Contents/Resources/licenses inventory identifies the third-party
+libraries and Rust build dependencies actually included in this distribution.
+Synthetic test bitstreams are project-owned generated fixtures, not codec code.
