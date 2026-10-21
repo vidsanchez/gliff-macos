@@ -72,6 +72,44 @@ class PackagerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Escaping bundle"):
                 pack.safe_tree(root)
 
+    def test_new_runtime_components_accept_only_audited_resolved_libraries(self):
+        for family, (version, filename) in pack.AUDITED_RUNTIME_COMPONENTS.items():
+            for revision in ("", "_2"):
+                with self.subTest(family=family, revision=revision), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp).resolve()
+                    source = root / "Cellar" / family / (version + revision) / "lib" / filename
+                    source.parent.mkdir(parents=True)
+                    source.touch()
+                    bundle = pack.Bundle.__new__(pack.Bundle)
+                    bundle.prefix, bundle.kegs = root, set()
+                    # Exercise the same realpath boundary used by Mach-O closure.
+                    alias = source.with_name("alias.dylib")
+                    alias.symlink_to(filename)
+                    bundle.remember_keg(alias)
+                    self.assertEqual(bundle.kegs, {source.parents[1]})
+
+    def test_new_runtime_components_reject_versions_abis_tools_and_unknowns(self):
+        cases = []
+        for family, (version, filename) in pack.AUDITED_RUNTIME_COMPONENTS.items():
+            cases.extend((family, bad_version, "lib", filename)
+                         for bad_version in ("99.0.0", version + "_0", version + "_head"))
+            cases.extend((family, version, directory, bad_name) for directory, bad_name in (
+                ("lib", filename.replace(".dylib", ".99.dylib")), ("bin", filename),
+                ("bin", "appstreamcli"), ("lib", "libappstream-compose.1.dylib"),
+                ("lib", "libappstream-qt.5.dylib")))
+        cases.append(("unknown-runtime", "1.0.0", "lib", "libunknown.dylib"))
+        for family, version, directory, filename in cases:
+            with self.subTest(path=(family, version, directory, filename)), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                source = root / "Cellar" / family / version / directory / filename
+                source.parent.mkdir(parents=True)
+                source.touch()
+                bundle = pack.Bundle.__new__(pack.Bundle)
+                bundle.prefix, bundle.kegs = root, set()
+                with self.assertRaisesRegex(ValueError, "Unaudited runtime component|Unreviewed runtime formula"):
+                    bundle.remember_keg(source)
+                self.assertFalse(bundle.kegs)
+
     def validate_fixture(self, library, architecture="arm64", min_library="27.0"):
         with tempfile.TemporaryDirectory(prefix="moved app ") as tmp:
             root = Path(tmp) / "Gliff.app"

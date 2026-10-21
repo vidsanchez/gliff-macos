@@ -92,6 +92,30 @@ Static analysis does not prove arbitrary `dlopen` paths, rendering/fonts,
 Finder/TCC, SSH connections, file pickers, or clean-machine behavior. That limit
 remains even when all known imports resolve inside the bundle.
 
+## Additional runtime components
+
+The libadwaita 1.9.3 build links AppStream; its library links libfyaml and libxmlb.
+Only these source versions and **resolved** library filenames are admitted:
+
+| Source | Library | License evidence |
+| --- | --- | --- |
+| AppStream 1.2.0 | `libappstream.5.dylib` | [LGPL-2.1-or-later declaration](https://github.com/ximion/appstream/blob/v1.2.0/meson.build), [license](https://github.com/ximion/appstream/blob/v1.2.0/COPYING) |
+| libfyaml 0.9.6 | `libfyaml.0.9.6.dylib` | [MIT license](https://github.com/pantoniou/libfyaml/blob/v0.9.6/LICENSE) |
+| libxmlb 0.3.29 | `libxmlb.2.dylib` | [LGPL-2.1-or-later source notice](https://github.com/hughsie/libxmlb/blob/0.3.29/src/xb-node.c), [license](https://github.com/hughsie/libxmlb/blob/0.3.29/LICENSE) |
+
+Numeric Homebrew keg revisions such as `1.2.0_2` are distinct from the source
+version. Different versions, ABIs, tools, compose/Qt libraries, and other files
+from these families require another audit. In particular, libfyaml's
+`libfyaml.0.dylib` symlink resolves to its full-version filename; checking just an
+install-name alias would not enforce this boundary. This is not a licensing
+claim about every component shipped by those projects.
+
+The installed recipe, source/patch URLs and SHA-256 values, actual license texts,
+and receipts still enter the corresponding-source and notice gates below.
+No AppStream utilities, extra data directories, or networking helpers are added.
+Compatible-library replacement and ad-hoc re-signing remain available as described
+below; the component allowlist does not waive license obligations.
+
 ## Sources and licenses: a separate gate
 
 `source-lock.json` uses **installed** recipes and their stable URL/SHA pairs,

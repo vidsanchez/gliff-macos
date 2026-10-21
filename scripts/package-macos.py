@@ -28,6 +28,13 @@ APPROVED_FORMULAS = {"brotli", "cairo", "fontconfig", "freetype", "fribidi", "gd
     "gettext", "glib", "graphene", "graphite2", "gtk4", "harfbuzz", "jpeg-turbo", "libadwaita",
     "libdatrie", "libepoxy", "libpng", "librsvg", "libthai", "libtiff", "libx11", "libxau",
     "libxcb", "libxdmcp", "libxext", "libxrender", "pango", "pcre2", "pixman", "xz", "zstd"}
+# These newly linked families are audited only at the listed source version and
+# resolved library filename, not as blanket permission to redistribute tools.
+AUDITED_RUNTIME_COMPONENTS = {
+    "appstream": ("1.2.0", "libappstream.5.dylib"),
+    "libfyaml": ("0.9.6", "libfyaml.0.9.6.dylib"),
+    "libxmlb": ("0.3.29", "libxmlb.2.dylib"),
+}
 LICENSE_RE = re.compile(r"^(copying|licen[sc]e|copyright|notice|authors)([._-].*)?$", re.I)
 
 
@@ -186,8 +193,15 @@ class Bundle:
             raise ValueError("Only LGPL libintl is audited from gettext; another component needs review")
         if relative.parts[0] == "xz" and not source.name.startswith("liblzma."):
             raise ValueError("Only liblzma is audited from xz; another component needs review")
-        if relative.parts[0] not in APPROVED_FORMULAS:
-            raise ValueError(f"Unreviewed runtime formula/license: {relative.parts[0]}")
+        family, keg_version = relative.parts[:2]
+        if family in AUDITED_RUNTIME_COMPONENTS:
+            version, filename = AUDITED_RUNTIME_COMPONENTS[family]
+            if (not re.fullmatch(re.escape(version) + r"(?:_[1-9]\d*)?", keg_version)
+                    or relative.parts[2:] != ("lib", filename)):
+                raise ValueError(f"Unaudited runtime component: {relative.as_posix()}; "
+                                 f"only source {version}, lib/{filename} is audited")
+        elif family not in APPROVED_FORMULAS:
+            raise ValueError(f"Unreviewed runtime formula/license: {family}")
         self.kegs.add(cellar / relative.parts[0] / relative.parts[1])
 
     def copy_binary(self, source, destination=None):
